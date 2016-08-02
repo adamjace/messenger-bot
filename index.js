@@ -58,6 +58,64 @@ class Bot extends EventEmitter {
     })
   }
 
+  setTyping (recipient, typing, cb) {
+    if (!cb) cb = Function.prototype
+    var typingStatus = typing ? 'typing_on' : 'typing_off'
+
+    request({
+      method: 'POST',
+      uri: 'https://graph.facebook.com/v2.6/me/messages',
+      qs: {
+        access_token: this.token
+      },
+      json: {
+        recipient: {
+          id: recipient
+        },
+        sender_action: typingStatus
+      }
+    }, (err, res, body) => {
+      if (err) return cb(err)
+      if (body.error) return cb(body.error)
+
+      cb(null, body)
+    })
+  }
+
+  setThreadSettings (threadState, callToActions, cb) {
+    if (!cb) cb = Function.prototype
+
+    request({
+      method: 'POST',
+      uri: 'https://graph.facebook.com/v2.6/me/thread_settings',
+      qs: {
+        access_token: this.token
+      },
+      json: {
+        setting_type: 'call_to_actions',
+        thread_state: threadState,
+        call_to_actions: callToActions
+      }
+    }, (err, res, body) => {
+      if (err) return cb(err)
+      if (body.error) return cb(body.error)
+
+      cb(null, body)
+    })
+  }
+
+  setGetStartedButton (payload, cb) {
+    if (!cb) cb = Function.prototype
+
+    return this.setThreadSettings('new_thread', payload, cb)
+  }
+
+  setPersistentMenu (payload, cb) {
+    if (!cb) cb = Function.prototype
+
+    return this.setThreadSettings('existing_thread', payload, cb)
+  }
+
   middleware () {
     return (req, res) => {
       // we always write 200, otherwise facebook will keep retrying the request
@@ -104,6 +162,11 @@ class Bot extends EventEmitter {
           this._handleEvent('message', event)
         }
 
+        // handle echos
+        if (event.message && event.message.is_echo) {
+          this._handleEvent('echo', event)
+        }
+
         // handle postbacks
         if (event.postback) {
           this._handleEvent('postback', event)
@@ -114,9 +177,23 @@ class Bot extends EventEmitter {
           this._handleEvent('delivery', event)
         }
 
+        // handle message read
+        if (event.read) {
+          this._handleEvent('read', event)
+        }
+
         // handle authentication
         if (event.optin) {
           this._handleEvent('authentication', event)
+        }
+
+        // handle account_linking
+        if (event.account_linking && event.account_linking.status) {
+          if (event.account_linking.status === 'linked') {
+            this._handleEvent('accountLinked', event)
+          } else if (event.account_linking.status === 'unlinked') {
+            this._handleEvent('accountUnlinked', event)
+          }
         }
       })
     })
